@@ -31,7 +31,7 @@ const onDragOver=(e:React.DragEvent)=>e.preventDefault();
 const onDrop=(id:string)=>{ const dragId=(window as any).__dragId as string; if(!dragId||dragId===id) return; const from=items.findIndex(x=>x.id===dragId); const to=items.findIndex(x=>x.id===id); if(from<0||to<0) return; const next=items.slice(); const [m]=next.splice(from,1); next.splice(to,0,m); setItems(next); (window as any).__dragId=null; };
 
 
-const mergeLocal = async ()=>{ const { PDFDocument } = await loadPdfLib(); const out = await PDFDocument.create(); for(const it of items){ const bytes=new Uint8Array(await it.file.arrayBuffer()); const src=await PDFDocument.load(bytes); const pages=await out.copyPages(src,src.getPageIndices()); pages.forEach(p=>out.addPage(p)); } const merged=await out.save(); return new Blob([merged],{type:'application/pdf'}); };
+const mergeLocal = async ()=>{ const { PDFDocument } = await loadPdfLib(); const out = await PDFDocument.create(); for(const it of items){ const bytes=new Uint8Array(await it.file.arrayBuffer()); const src=await PDFDocument.load(bytes); const pages=await out.copyPages(src,src.getPageIndices()); pages.forEach((p: any) => out.addPage(p)); } const merged=await out.save(); return new Blob([merged],{type:'application/pdf'}); };
 const mergeCloud = async ()=>{ const fd=new FormData(); items.forEach((it,i)=>fd.append('files',it.file,`file-${i+1}.pdf`)); const res=await fetch(`${CLOUD_BASE}/api/merge-pdf`,{method:'POST',body:fd}); if(!res.ok) throw new Error(`Cloud merge failed ${res.status}`); return await res.blob(); };
 
 
