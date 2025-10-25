@@ -1,68 +1,113 @@
-'use client';
-import React, { useState } from 'react';
-import Pill from './Pill';
-import Toasts, { Toast } from './Toast';
-
-
-const CLOUD_BASE = process.env.NEXT_PUBLIC_FIXKIT_CLOUD_BASE || 'https://fixkit-global.vercel.app';
-
+"use client";
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export default function BackgroundRemove() {
-const [file, setFile] = useState<File|null>(null);
-const [tolerance, setTolerance] = useState(24);
-const [outUrl, setOutUrl] = useState<string|null>(null);
-const [busy, setBusy] = useState(false);
-const [mode, setMode] = useState<'local'|'cloud'>('local');
-const [toasts, setToasts] = useState<Toast[]>([]);
-const toast = (t: Omit<Toast,'id'>) => setToasts(xs=>[...xs,{...t,id:Date.now()+Math.random()}]);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [mode, setMode] = useState<"local" | "cloud">("cloud");
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    setFile(f || null);
+    setResultUrl(null);
+  };
 
-const runLocal = async (f: File) => {
-const img = new Image();
-const srcUrl = URL.createObjectURL(f); img.src = srcUrl;
-await new Promise<void>((res,rej)=>{img.onload=()=>res(); img.onerror=rej;});
-const c=document.createElement('canvas'); const ctx=c.getContext('2d',{willReadFrequently:true})!;
-c.width=img.width; c.height=img.height; ctx.drawImage(img,0,0);
-const imageData = ctx.getImageData(0,0,c.width,c.height); const d=imageData.data;
-const pick=(x:number,y:number)=>{const i=(y*c.width+x)*4; return [d[i],d[i+1],d[i+2]]};
-const samples=[pick(0,0),pick(c.width-1,0),pick(0,c.height-1),pick(c.width-1,c.height-1)];
-const dist=(r:number,g:number,b:number,s:number[])=>Math.sqrt((r-s[0])**2+(g-s[1])**2+(b-s[2])**2);
-for(let i=0;i<d.length;i+=4){const r=d[i],g=d[i+1],b=d[i+2];const m=Math.min(dist(r,g,b,samples[0]),dist(r,g,b,samples[1]),dist(r,g,b,samples[2]),dist(r,g,b,samples[3])); if(m<tolerance)d[i+3]=0;}
-ctx.putImageData(imageData,0,0);
-const blob:Blob|null=await new Promise(res=>c.toBlob(res,'image/png')); if(!blob) throw new Error('encode failed');
-URL.revokeObjectURL(srcUrl); return URL.createObjectURL(blob);
-};
+  async function run() {
+    if (!file) return alert("Please select an image first.");
+    setBusy(true);
+    setResultUrl(null);
 
+    try {
+      if (mode === "local") {
+        // Local mode placeholder
+        setTimeout(() => {
+          alert("Local background removal not yet integrated.");
+          setBusy(false);
+        }, 1000);
+        return;
+      }
 
-const runCloud = async (f: File) => {
-const fd = new FormData(); fd.append('file',f); fd.append('tolerance',String(tolerance));
-const res = await fetch(`${CLOUD_BASE}/api/bg-remove`,{method:'POST',body:fd});
-if(!res.ok) throw new Error(`Cloud error ${res.status}`);
-return URL.createObjectURL(await res.blob());
-};
+      const CLOUD_BASE = process.env.NEXT_PUBLIC_FIXKIT_CLOUD_BASE;
+      if (!CLOUD_BASE) throw new Error("Cloud API not configured.");
 
+      const res = await fetch(`${CLOUD_BASE}/api/bg-remove`, {
+        method: "POST",
+        body: file,
+      });
+      if (!res.ok) throw new Error(`Cloud request failed (${res.status})`);
 
-const run = async ()=>{
-if(!file) return; setBusy(true);
-try{
-try{ setMode('local'); const url=await runLocal(file); setOutUrl(old=>{if(old)URL.revokeObjectURL(old); return url;}); toast({kind:'success',text:'Background removed locally.'}); }
-catch{ setMode('cloud'); const url=await runCloud(file); setOutUrl(old=>{if(old)URL.revokeObjectURL(old); return url;}); toast({kind:'success',text:'Background removed via FixKit Cloud.'}); }
-}catch(e:any){ toast({kind:'error',text:e.message||'Background removal failed'}); }
-finally{ setBusy(false); }
-};
+      const data = await res.json();
+      if (data.ok && data.url) {
+        setResultUrl(data.url);
+      } else {
+        throw new Error(data.error || "Unknown error");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
+  return (
+    <div className="flex flex-col items-center gap-4 p-4 w-full max-w-3xl mx-auto">
+      <h2 className="text-xl font-semibold text-center">Remove Background</h2>
 
-return (
-<section className="card p-4 my-6">
-<h2 className="text-xl font-bold mb-2">Background Removal</h2>
-<input type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0]||null)} />
-<div className="flex items-center gap-2 text-sm my-2">
-<label className="flex items-center gap-2">Tolerance <input type="range" min={4} max={64} step={1} value={tolerance} onChange={e=>setTolerance(Number(e.target.value))} /></label>
-<Pill>{mode==='local'?'Local':'Cloud'}</Pill>
-</div>
-<button disabled={!file||busy} className="btn-primary" onClick={run}>{busy?'Processing…':'Remove background'}</button>
-{outUrl && (<div className="mt-3 card p-3"><img src={outUrl} alt="bg-removed" className="max-h-72 rounded-lg border border-white/10"/><div className="mt-2"><a download="fixkit-bg-removed.png" href={outUrl} className="underline">Download PNG</a></div></div>)}
-<Toasts items={toasts} />
-</section>
-);
+      <input
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        className="w-full border p-2 rounded-md"
+      />
+
+      <div className="flex gap-2">
+        <Button disabled={!file || busy} onClick={run}>
+          {busy ? "Processing…" : "Remove Background"}
+        </Button>
+        <select
+          className="border p-2 rounded-md"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as any)}
+        >
+          <option value="cloud">Cloud (HD)</option>
+          <option value="local">Local (fast)</option>
+        </select>
+      </div>
+
+      {file && (
+        <div className="mt-6 grid md:grid-cols-2 gap-4 w-full">
+          <div className="flex flex-col items-center">
+            <p className="font-medium mb-2">Original</p>
+            <img
+              src={URL.createObjectURL(file)}
+              alt="original"
+              className="max-h-96 rounded-lg shadow"
+            />
+          </div>
+
+          {resultUrl && (
+            <div className="flex flex-col items-center">
+              <p className="font-medium mb-2">Result (Background Removed)</p>
+              <img
+                src={resultUrl}
+                alt="result"
+                className="max-h-96 rounded-lg shadow border border-gray-200"
+              />
+              <a
+                href={resultUrl}
+                download="fixkit-removed.png"
+                className="mt-3 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+              >
+                Download Result
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!file && <p className="text-gray-500 mt-4">Select an image to start.</p>}
+    </div>
+  );
 }
